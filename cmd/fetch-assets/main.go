@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	sensevoice "github.com/apexracing/tracklogic-asr"
+	"github.com/apexracing/tracklogic-asr/assets"
 )
 
 func main() {
@@ -20,15 +20,10 @@ func main() {
 		}
 	}
 	ctx := context.Background()
-	runtimePath, err := sensevoice.EnsureRuntime(ctx, "", progress)
+	paths, err := assets.Prepare(ctx, assets.Config{Progress: progress})
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "\nruntime:", err)
+		fmt.Fprintln(os.Stderr, "\nprepare assets:", err)
 		os.Exit(1)
 	}
-	model, err := sensevoice.EnsureModel(ctx, "", progress)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "\nmodel:", err)
-		os.Exit(1)
-	}
-	fmt.Printf("\nONNX Runtime: %s\nModel: %s\n", runtimePath, model.Directory)
+	fmt.Printf("\nONNX Runtime: %s\nModel: %s\n", paths.RuntimePath, paths.Model.Directory)
 }

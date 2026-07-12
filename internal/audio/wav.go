@@ -1,4 +1,4 @@
-package sensevoice
+package audio
 
 import (
 	"encoding/binary"
@@ -106,7 +106,7 @@ func decodeSample(b []byte, format, bits uint16) (float32, error) {
 	}
 }
 
-func resampleLinear(in []float32, from, to int) []float32 {
+func ResampleLinear(in []float32, from, to int) []float32 {
 	if from == to || len(in) == 0 {
 		return append([]float32(nil), in...)
 	}

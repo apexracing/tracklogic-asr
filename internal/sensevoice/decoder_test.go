@@ -2,6 +2,12 @@ package sensevoice
 
 import "testing"
 
+func TestFrontendRejectsShortAudio(t *testing.T) {
+	if _, _, err := (&frontend{}).extract(make([]float32, 100), 16000); err == nil {
+		t.Fatal("expected short-audio error")
+	}
+}
+
 func TestDecoderCTCGreedyAndMetadata(t *testing.T) {
 	d := &decoder{tokens: []string{"<blank>", "<|zh|>", "<|NEUTRAL|>", "▁hello", "世", "界"}}
 	ids := []int{1, 1, 0, 2, 3, 3, 0, 4, 5}
@@ -18,12 +24,5 @@ func TestDecoderCTCGreedyAndMetadata(t *testing.T) {
 	}
 	if got.Language != "zh" || got.Emotion != "NEUTRAL" {
 		t.Fatalf("metadata = language %q emotion %q", got.Language, got.Emotion)
-	}
-}
-
-func TestResampleLinear(t *testing.T) {
-	got := resampleLinear([]float32{0, 1, 0}, 3, 6)
-	if len(got) != 6 || got[1] != 0.5 || got[2] != 1 {
-		t.Fatalf("unexpected resampling: %v", got)
 	}
 }

@@ -12,6 +12,15 @@ type decoder struct {
 	tokens []string
 }
 
+type DecodedResult struct {
+	Text     string
+	Language string
+	Emotion  string
+	Events   []string
+	Tokens   []string
+	TokenIDs []int
+}
+
 func newDecoder(path string) (*decoder, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
@@ -27,9 +36,9 @@ func newDecoder(path string) (*decoder, error) {
 	return &decoder{tokens: tokens}, nil
 }
 
-func (d *decoder) decode(logits []float32, frames, vocab int) (Result, error) {
+func (d *decoder) decode(logits []float32, frames, vocab int) (DecodedResult, error) {
 	if frames <= 0 || vocab <= 0 || len(logits) < frames*vocab {
-		return Result{}, fmt.Errorf("invalid logits shape [%d,%d] for %d values", frames, vocab, len(logits))
+		return DecodedResult{}, fmt.Errorf("invalid logits shape [%d,%d] for %d values", frames, vocab, len(logits))
 	}
 	ids := make([]int, 0, frames)
 	prev := -1
@@ -47,7 +56,7 @@ func (d *decoder) decode(logits []float32, frames, vocab int) (Result, error) {
 		prev = best
 	}
 
-	result := Result{TokenIDs: ids}
+	result := DecodedResult{TokenIDs: ids}
 	var textTokens []string
 	for _, id := range ids {
 		if id < 0 || id >= len(d.tokens) {

@@ -8,7 +8,8 @@ import (
 	"path/filepath"
 	"time"
 
-	sensevoice "github.com/apexracing/tracklogic-asr"
+	asr "github.com/apexracing/tracklogic-asr"
+	"github.com/apexracing/tracklogic-asr/assets"
 )
 
 func main() {
@@ -21,8 +22,8 @@ func main() {
 	recordOutput := flag.String("record-out", filepath.FromSlash("testdata/local-recording.wav"), "recorded WAV output path")
 	flag.Parse()
 	if *recordDuration <= 0 && flag.NArg() != 1 {
-		fmt.Fprintln(os.Stderr, "usage: sensevoice [flags] audio.wav")
-		fmt.Fprintln(os.Stderr, "   or: sensevoice -record 5s [flags]")
+		fmt.Fprintln(os.Stderr, "usage: tracklogic-asr [flags] audio.wav")
+		fmt.Fprintln(os.Stderr, "   or: tracklogic-asr -record 5s [flags]")
 		flag.PrintDefaults()
 		os.Exit(2)
 	}
@@ -51,27 +52,29 @@ func main() {
 
 	started := time.Now()
 	lastPercent := map[string]int{}
-	r, err := sensevoice.New(ctx, sensevoice.Config{
-		RuntimePath: *runtimePath,
-		ModelDir:    *modelDir,
-		NumThreads:  *threads,
-		Progress: func(name string, downloaded, total int64) {
-			if total > 0 {
-				percent := int(downloaded * 100 / total)
-				if lastPercent[name] != percent || downloaded == total {
-					lastPercent[name] = percent
-					fmt.Fprintf(os.Stderr, "\r%-35s %3d%%", name, percent)
+	r, err := asr.New(ctx, asr.Config{
+		Assets: assets.Config{
+			RuntimePath: *runtimePath,
+			ModelDir:    *modelDir,
+			Progress: func(name string, downloaded, total int64) {
+				if total > 0 {
+					percent := int(downloaded * 100 / total)
+					if lastPercent[name] != percent || downloaded == total {
+						lastPercent[name] = percent
+						fmt.Fprintf(os.Stderr, "\r%-35s %3d%%", name, percent)
+					}
 				}
-			}
+			},
 		},
+		NumThreads: *threads,
 	})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "initialize:", err)
 		os.Exit(1)
 	}
 	defer r.Close()
-	result, err := r.TranscribeFile(ctx, audioPath, sensevoice.Options{
-		Language:   sensevoice.Language(*language),
+	result, err := r.TranscribeFile(ctx, audioPath, asr.Options{
+		Language:   asr.Language(*language),
 		WithoutITN: *withoutITN,
 	})
 	if err != nil {

@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/apexracing/tracklogic-asr/internal/audio"
 	"github.com/mjibson/go-dsp/fft"
 )
 
@@ -53,7 +54,7 @@ func (f *frontend) extract(samples []float32, sampleRate int) ([]float32, int, e
 	if len(samples) < sampleRate/10 {
 		return nil, 0, fmt.Errorf("audio is too short: need at least 100 ms")
 	}
-	samples = resampleLinear(samples, sampleRate, targetSampleRate)
+	samples = audio.ResampleLinear(samples, sampleRate, targetSampleRate)
 	frames := 1 + (len(samples)-frameLength)/frameShift
 	if frames <= 0 {
 		return nil, 0, fmt.Errorf("audio is too short for feature extraction")
