@@ -3,7 +3,4 @@ models/
 testdata/local-*.wav
 /testdata/tts-*/
 /Kokoro-*/
-/benchmark-results/*.json
-!/benchmark-results/baseline-windows-i7-10700f.json
-/benchmark-results/*.wav
-/benchmark-results/current.*
+/benchmark-results/

@@ -1,33 +1,36 @@
 # tracklogic-voice
 
-纯 Go 的离线语音库，同时提供 SenseVoice ASR 和 Kokoro 中英文 TTS。公开 API 位于根包 `voice`，推理使用内嵌的 ONNX Runtime 1.26.0 CPU 版；运行时不依赖 Python、PyTorch、Misaki 或 eSpeak NG。
+`tracklogic-voice` 是面向 Windows x64 上层应用的离线语音库，提供统一的 Go API：
 
-当前支持 Windows x64。ASR 接受多种采样率的 WAV 或内存 PCM；TTS 支持中文、美式英语和自动分段的中英混合文本，输出 24 kHz 单声道 float32 PCM 或 16-bit PCM WAV。
+- SenseVoice INT8 自动语音识别（ASR）
+- Kokoro 82M FP32 中文、美式英语及中英混合语音合成（TTS）
+- 内嵌 ONNX Runtime 1.26.0 CPU 运行库
+- 固定模型版本、SHA-256 校验和 ModelScope/Hugging Face 下载源
 
-## 快速使用
+运行时不依赖 Python、PyTorch、Misaki 或 eSpeak NG。库不包含麦克风采集或录音功能。
 
-识别 WAV：
+## 环境要求
 
-```powershell
-go run ./cmd/tracklogic-voice asr -model-cache-dir .\models\sensevoice-small-int8 testdata/zh.wav
-```
-
-合成中文、英文或混合文本：
-
-```powershell
-go run ./cmd/tracklogic-voice tts -model-cache-dir .\models\kokoro-82m-v1.1-zh -out voice.wav "你好，Tracklogic Voice!"
-```
-
-模型下载目录必须由上层应用通过 `ModelCacheDir`（CLI 中为 `-model-cache-dir`）显式指定。首次运行会从 ModelScope 下载并校验固定版本的模型；显式使用 Hugging Face 时加上 `-model-source huggingface`，下载失败不会自动切换来源。
-
-提前准备离线资源也统一使用 `tracklogic-voice fetch`：
+- Windows x64
+- Go 1.24.3 或更高版本
+- CGO 已启用
 
 ```powershell
-go run ./cmd/tracklogic-voice fetch -model-cache-dir .\models\sensevoice-small-int8 asr
-go run ./cmd/tracklogic-voice fetch -model-cache-dir .\models\kokoro-82m-v1.1-zh tts
+go get github.com/apexracing/tracklogic-voice
 ```
 
-## Go API
+## 资源目录
+
+模型目录由上层应用管理。调用方必须选择以下一种方式：
+
+1. 通过 `ModelDir` 提供已经准备好的模型目录；
+2. 通过 `ModelCacheDir` 指定下载和长期保存模型的目录。
+
+库不会为模型选择系统临时目录或默认缓存目录。`ModelSource` 未设置时使用 ModelScope，也可以显式指定 `assets.ModelSourceHuggingFace`。下载内容固定到已校验的版本，失败时不会自动切换来源。
+
+`RuntimePath` 可以留空，此时使用内嵌的 ONNX Runtime；如需控制运行库释放位置，可设置 `RuntimeCacheDir`。
+
+## ASR
 
 ```go
 package main
@@ -41,10 +44,7 @@ import (
 	"github.com/apexracing/tracklogic-voice/assets"
 )
 
-func main() {
-	ctx := context.Background()
-	modelRoot := `D:\Tracklogic\models` // 由上层应用决定
-
+func recognize(ctx context.Context, modelRoot, wavPath string) {
 	recognizer, err := voice.NewRecognizer(ctx, voice.RecognizerConfig{
 		Assets: assets.ASRConfig{
 			ModelCacheDir: filepath.Join(modelRoot, "sensevoice-small-int8"),
@@ -56,14 +56,23 @@ func main() {
 		log.Fatal(err)
 	}
 	defer recognizer.Close()
-	result, err := recognizer.TranscribeFile(ctx, `testdata\zh.wav`, voice.TranscriptionOptions{
+
+	result, err := recognizer.TranscribeFile(ctx, wavPath, voice.TranscriptionOptions{
 		Language: voice.LanguageAuto,
 	})
 	if err != nil {
 		log.Fatal(err)
 	}
 	log.Println(result.Text)
+}
+```
 
+`Transcribe` 接受单声道 `[]float32` PCM 和对应采样率，非 16 kHz 输入会自动重采样。`TranscribeFile` 支持未压缩 WAV，包括 PCM 8/16/24/32-bit、IEEE float32 和多声道自动混音。
+
+## TTS
+
+```go
+func synthesize(ctx context.Context, modelRoot, outputPath string) {
 	synthesizer, err := voice.NewSynthesizer(ctx, voice.SynthesizerConfig{
 		Assets: assets.TTSConfig{
 			ModelCacheDir: filepath.Join(modelRoot, "kokoro-82m-v1.1-zh"),
@@ -75,74 +84,85 @@ func main() {
 		log.Fatal(err)
 	}
 	defer synthesizer.Close()
-	if err = synthesizer.SynthesizeFile(ctx, "千里之行，始于足下。", "voice.wav", voice.SynthesisOptions{
+
+	err = synthesizer.SynthesizeFile(ctx, "赛车工程师报告：前方3号弯，注意刹车温度。", outputPath, voice.SynthesisOptions{
+		Voice:       "zm_009",
+		Language:    voice.LanguageAuto,
+		Speed:       1,
 		TrimSilence: true,
-	}); err != nil {
+	})
+	if err != nil {
 		log.Fatal(err)
 	}
 }
 ```
 
-`Synthesize` 和 `SynthesizePhonemes` 返回 24 kHz 单声道 `[]float32`。纯英文默认 voice 为 `af_maple`，中文和混合文本默认 `zf_001`；`Voices` 返回聚合包中的 103 个 voice。`SynthesisOptions.Language` 可设为 `auto`、`zh` 或 `en`。
+`Synthesize` 和 `SynthesizePhonemes` 返回 24 kHz 单声道 `[]float32` PCM；`SynthesizeFile` 输出 16-bit PCM WAV。纯英文默认声线为 `af_maple`，中文和中英混合文本默认声线为 `zf_001`。
 
-上层应用可通过 `voice.SelectableVoices()` 获取筛选后的 8 个可选声线及其显示名、语言地区和性别；`Synthesizer.Voices()` 仍返回模型内全部原始 voice ID：
+当前提供给上层应用的精选声线：
 
-```go
-for _, option := range voice.SelectableVoices() {
-	log.Printf("%s: %s (%s, %s)", option.ID, option.Name, option.Locale, option.Gender)
-}
+| Voice ID | 显示名称 | 语言 | 性别 |
+|---|---|---|---|
+| `zf_022` | 晴岚 | 中文 | 女声 |
+| `zf_001` | 若溪 | 中文 | 女声 |
+| `zf_046` | 凌音 | 中文 | 女声 |
+| `zm_058` | 长风 | 中文 | 男声 |
+| `zm_069` | 观澜 | 中文 | 男声 |
+| `zm_009` | 知衡 | 中文 | 男声 |
+| `af_maple` | Maple | 美式英语 | 女声 |
+| `bf_vale` | Vale | 英式英语 | 女声 |
+
+使用 `voice.SelectableVoices()` 获取可直接导出到上层应用的结构化列表。`Synthesizer.Voices()` 返回模型中全部原始 voice ID。
+
+## 命令行工具
+
+仓库提供用于开发验证和提前准备资源的统一命令，不提供录音命令：
+
+```powershell
+go run ./cmd/tracklogic-voice fetch -model-cache-dir .\models\sensevoice-small-int8 asr
+go run ./cmd/tracklogic-voice fetch -model-cache-dir .\models\kokoro-82m-v1.1-zh tts
+
+go run ./cmd/tracklogic-voice asr -model-cache-dir .\models\sensevoice-small-int8 testdata\zh.wav
+go run ./cmd/tracklogic-voice tts -model-cache-dir .\models\kokoro-82m-v1.1-zh -out voice.wav "你好，Tracklogic Voice!"
 ```
 
-旧版 `New`、`Config`、`Options`、`Result` 与 `assets.Prepare` 仍可编译，但已标记弃用。
+## 模型版本
 
-## G2P
-
-中文前端使用 `gse v1.0.2`、`go-pinyin v0.21.0`、数字规范化、变调、轻声和儿化规则。英文前端内嵌固定 revision `74790861f652b15e4ac49015a90074ad62a27690` 的 CMUdict；词典未命中的单词由纯 Go letter-to-sound 规则处理。混合文本按 Unicode 文字类型分段后合并音素。
-
-## 模型资源
-
-TTS 的两个固定下载源提供字节一致的资源：
+TTS 资源从以下固定版本下载，两处内容按 SHA-256 校验：
 
 - ModelScope：`huntsman/voice`，revision `49e8fe2437ce5cc1c9af35d3285e56b14980099f`
 - Hugging Face：`tracklogic/voice`，revision `7b789e1fc5e3cf09e4634dc53c7fc4ed062ab00b`
 
-固定校验 `onnx/model_quantized.onnx`、`voices/voices-v1.1-zh.bin`、`tokenizer.json`、`tokenizer_config.json` 和 `config.json`。ModelScope LFS 下载仅使用 GET。未提供现成 `ModelDir` 时，`assets.PrepareASR` 和 `assets.PrepareTTS` 要求上层应用提供 `ModelCacheDir`，库不会自行选择系统缓存目录；`RuntimePath` 仍可留空以使用内嵌运行库。
+TTS 模型路径保留为 `onnx/model_quantized.onnx` 以兼容已有目录结构，但当前文件内容为 **FP32**，SHA-256 为 `94b973941b1852754f979be5d5e20be666d5c81d9bb886b88ae1dc85c9b895ca`。FP16 及其他实验模型不在当前支持范围内。
 
-`onnx/model_quantized.onnx` 文件名为兼容现有目录结构而保留，当前固定内容是 FP32 模型，SHA-256 为 `94b973941b1852754f979be5d5e20be666d5c81d9bb886b88ae1dc85c9b895ca`。
-
-## CPU 性能测试
-
-独立 runner 固定 `GOMAXPROCS=2`、ONNX inter-op=1、sequential execution，ONNX intra-op 默认为 2，并运行 3 次预热和 10 次正式测量。可通过 `-onnx-threads` 单独调整 ONNX intra-op 线程数：
+## 测试与性能验证
 
 ```powershell
-go run ./cmd/voice-benchmark `
-  -asr-model-cache-dir .\models\sensevoice-small-int8 `
-  -tts-model-cache-dir .\models\kokoro-82m-v1.1-zh
+go test ./...
+go test -race ./...
+go vet ./...
+go build ./cmd/...
 ```
 
-它覆盖 ASR、中文 TTS、英文 TTS 和混合 TTS，输出 JSON 与 Markdown，记录初始化、首次推理、mean/p50/p95/min/max、RTF、ops/s、CPU 时间和占用、Working Set、Private Bytes 及 Go 内存指标。标准 Go benchmarks：
+需要本地模型的端到端测试会在资源不存在时自动跳过。可通过 `SENSEVOICE_MODEL_DIR`、`SENSEVOICE_TEST_WAV`、`KOKORO_MODEL_DIR` 和 `ONNXRUNTIME_DLL` 指定测试资源。
 
-```powershell
-$env:TRACKLOGIC_BENCH='1'
-$env:SENSEVOICE_MODEL_DIR='.\models\sensevoice-small-int8'
-$env:KOKORO_MODEL_DIR='.\models\kokoro-82m-v1.1-zh'
-go test -run '^$' -bench '2Threads$' -benchmem .
-```
-
-将新结果与已提交 baseline 比较，延迟、CPU 时间或峰值内存超过 15% 会返回失败：
+性能 runner 默认使用 ONNX intra-op 2 线程、inter-op 1 线程、`GOMAXPROCS=2`，执行 3 次预热和 10 次测量：
 
 ```powershell
 go run ./cmd/voice-benchmark `
   -asr-model-cache-dir .\models\sensevoice-small-int8 `
   -tts-model-cache-dir .\models\kokoro-82m-v1.1-zh `
-  -compare benchmark-results/baseline-windows-i7-10700f.json `
-  -out benchmark-results/current.json
+  -out .\benchmark-results\current.json
 ```
 
-## 环境与许可
+可通过 `-onnx-threads` 调整 ONNX intra-op 线程数。性能结果与本机硬件、系统负载和模型版本强相关，因此 `benchmark-results` 仅作为本地输出目录，不提交到仓库。
 
-- Windows x64、Go 1.24.3 或更高版本，并启用 CGO。
-- ASR WAV 支持 PCM 8/16/24/32-bit 和 IEEE float32；多声道自动混音，采样率自动转换到 16 kHz。
-- 当前为离线整段 ASR/TTS，不包含流式接口或 GPU 后端。
+## 兼容性与限制
 
-项目源码使用 MIT License。内嵌 ONNX Runtime 使用 Microsoft MIT License；CMUdict 许可见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。模型权重适用各自模型仓库公布的许可与归属要求。
+- 当前仅支持 CPU 推理和离线整段 ASR/TTS，不提供流式接口或 GPU 后端。
+- `New`、`Config`、`Options`、`Result` 和 `assets.Prepare` 仅为源代码兼容保留，已标记弃用。
+- `Recognizer` 和 `Synthesizer` 持有原生资源，使用完成后必须调用 `Close`。
+
+## 许可
+
+项目源码使用 MIT License。内嵌 ONNX Runtime 使用 Microsoft MIT License；CMUdict 许可见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。模型权重适用对应模型仓库公布的许可与归属要求。
