@@ -1,4 +1,4 @@
-package asr
+package voice
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/apexracing/tracklogic-asr/assets"
+	"github.com/apexracing/tracklogic-voice/assets"
 )
 
 func TestIntegrationSenseVoiceINT8(t *testing.T) {
@@ -66,5 +66,73 @@ func TestIntegrationSenseVoiceINT8(t *testing.T) {
 	}
 	if _, err = r.TranscribeFile(context.Background(), wav, Options{}); err == nil {
 		t.Fatal("expected closed-recognizer error")
+	}
+}
+
+func TestIntegrationKokoroQuantized(t *testing.T) {
+	if runtime.GOOS != "windows" || runtime.GOARCH != "amd64" {
+		t.Skip("bundled runtime is windows/amd64")
+	}
+	modelDir := os.Getenv("KOKORO_MODEL_DIR")
+	if modelDir == "" {
+		modelDir = filepath.FromSlash("Kokoro-82M-v1.1-zh-ONNX")
+	}
+	if _, err := os.Stat(filepath.Join(modelDir, "onnx", "model_quantized.onnx")); err != nil {
+		t.Skipf("local Kokoro model unavailable: %s", modelDir)
+	}
+	s, err := NewSynthesizer(context.Background(), SynthesizerConfig{
+		Assets:     assets.TTSConfig{ModelDir: modelDir, RuntimePath: os.Getenv("ONNXRUNTIME_DLL")},
+		NumThreads: 2,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := len(s.Voices()); got != 103 {
+		t.Fatalf("Voices() returned %d entries, want 103", got)
+	}
+	for name, text := range map[string]string{
+		"Chinese": "千里之行，始于足下。",
+		"English": "Tracklogic voice speaks clearly.",
+		"Mixed":   "你好，Tracklogic voice!",
+	} {
+		t.Run(name, func(t *testing.T) {
+			samples, synthErr := s.Synthesize(context.Background(), text, SynthesisOptions{TrimSilence: true})
+			if synthErr != nil {
+				t.Fatal(synthErr)
+			}
+			if len(samples) < SynthesisSampleRate/10 {
+				t.Fatalf("unexpectedly short waveform: %d samples", len(samples))
+			}
+		})
+	}
+	path := filepath.Join(t.TempDir(), "voice.wav")
+	if err = s.SynthesizeFile(context.Background(), "测试 WAV。", path, SynthesisOptions{TrimSilence: true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = os.Stat(path); err != nil {
+		t.Fatal(err)
+	}
+	var wg sync.WaitGroup
+	errs := make(chan error, 2)
+	for range 2 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, synthErr := s.Synthesize(context.Background(), "Hi.", SynthesisOptions{TrimSilence: true})
+			errs <- synthErr
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for synthErr := range errs {
+		if synthErr != nil {
+			t.Fatal(synthErr)
+		}
+	}
+	if err = s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.Synthesize(context.Background(), "closed", SynthesisOptions{}); err == nil {
+		t.Fatal("expected closed-synthesizer error")
 	}
 }

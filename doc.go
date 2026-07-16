@@ -1,2 +1,2 @@
-// Package asr provides offline speech recognition backed by SenseVoiceSmall INT8.
-package asr
+// Package voice provides offline speech recognition and synthesis.
+package voice

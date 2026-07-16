@@ -5,7 +5,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/apexracing/tracklogic-asr/assets"
+	"github.com/apexracing/tracklogic-voice/assets"
+	"github.com/apexracing/tracklogic-voice/internal/ortutil"
 	ort "github.com/yalue/onnxruntime_go"
 )
 
@@ -22,13 +23,6 @@ type Engine struct {
 	closed   bool
 }
 
-var runtimeState struct {
-	sync.Mutex
-	users int
-	path  string
-	owned bool
-}
-
 func NewEngine(model assets.ModelPaths, runtimePath string, numThreads int) (*Engine, error) {
 	fe, err := newFrontend(model.CMVN)
 	if err != nil {
@@ -38,13 +32,13 @@ func NewEngine(model assets.ModelPaths, runtimePath string, numThreads int) (*En
 	if err != nil {
 		return nil, err
 	}
-	if err = acquireRuntime(runtimePath); err != nil {
+	if err = ortutil.Acquire(runtimePath); err != nil {
 		return nil, err
 	}
 	cleanup := true
 	defer func() {
 		if cleanup {
-			releaseRuntime()
+			ortutil.Release()
 		}
 	}()
 	so, err := ort.NewSessionOptions()
@@ -57,6 +51,12 @@ func NewEngine(model assets.ModelPaths, runtimePath string, numThreads int) (*En
 			return nil, fmt.Errorf("set ONNX threads: %w", err)
 		}
 	}
+	if err = so.SetInterOpNumThreads(1); err != nil {
+		return nil, fmt.Errorf("set ONNX inter-op threads: %w", err)
+	}
+	if err = so.SetExecutionMode(ort.ExecutionModeSequential); err != nil {
+		return nil, fmt.Errorf("set ONNX execution mode: %w", err)
+	}
 	session, err := ort.NewDynamicAdvancedSession(model.Model,
 		[]string{"speech", "speech_lengths", "language", "textnorm"},
 		[]string{"ctc_logits", "encoder_out_lens"}, so)
@@ -65,48 +65,6 @@ func NewEngine(model assets.ModelPaths, runtimePath string, numThreads int) (*En
 	}
 	cleanup = false
 	return &Engine{session: session, frontend: fe, decoder: dec}, nil
-}
-
-func acquireRuntime(path string) error {
-	runtimeState.Lock()
-	defer runtimeState.Unlock()
-	if runtimeState.users > 0 {
-		if runtimeState.path != path {
-			return fmt.Errorf("ONNX Runtime already initialized from %s", runtimeState.path)
-		}
-		runtimeState.users++
-		return nil
-	}
-	if ort.IsInitialized() {
-		runtimeState.users = 1
-		runtimeState.path = path
-		runtimeState.owned = false
-		return nil
-	}
-	ort.SetSharedLibraryPath(path)
-	if err := ort.InitializeEnvironment(ort.WithLogLevelWarning()); err != nil {
-		return fmt.Errorf("initialize ONNX Runtime from %s: %w", path, err)
-	}
-	runtimeState.users = 1
-	runtimeState.path = path
-	runtimeState.owned = true
-	return nil
-}
-
-func releaseRuntime() {
-	runtimeState.Lock()
-	defer runtimeState.Unlock()
-	if runtimeState.users == 0 {
-		return
-	}
-	runtimeState.users--
-	if runtimeState.users == 0 {
-		if runtimeState.owned {
-			_ = ort.DestroyEnvironment()
-		}
-		runtimeState.path = ""
-		runtimeState.owned = false
-	}
 }
 
 func (e *Engine) Transcribe(ctx context.Context, samples []float32, sampleRate int, language string, withoutITN bool) (DecodedResult, error) {
@@ -189,6 +147,6 @@ func (e *Engine) Close() error {
 	}
 	e.closed = true
 	err := e.session.Destroy()
-	releaseRuntime()
+	ortutil.Release()
 	return err
 }

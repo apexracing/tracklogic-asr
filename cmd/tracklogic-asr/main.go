@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"time"
 
-	asr "github.com/apexracing/tracklogic-asr"
-	"github.com/apexracing/tracklogic-asr/assets"
+	voice "github.com/apexracing/tracklogic-voice"
+	"github.com/apexracing/tracklogic-voice/assets"
 )
 
 func main() {
@@ -53,7 +53,7 @@ func main() {
 
 	started := time.Now()
 	lastPercent := map[string]int{}
-	r, err := asr.New(ctx, asr.Config{
+	r, err := voice.NewRecognizer(ctx, voice.RecognizerConfig{
 		Assets: assets.Config{
 			RuntimePath: *runtimePath,
 			ModelDir:    *modelDir,
@@ -75,8 +75,8 @@ func main() {
 		os.Exit(1)
 	}
 	defer r.Close()
-	result, err := r.TranscribeFile(ctx, audioPath, asr.Options{
-		Language:   asr.Language(*language),
+	result, err := r.TranscribeFile(ctx, audioPath, voice.TranscriptionOptions{
+		Language:   voice.Language(*language),
 		WithoutITN: *withoutITN,
 	})
 	if err != nil {

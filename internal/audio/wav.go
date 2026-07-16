@@ -106,6 +106,49 @@ func decodeSample(b []byte, format, bits uint16) (float32, error) {
 	}
 }
 
+// WriteWAV writes mono float32 samples as a 16-bit PCM WAV file.
+func WriteWAV(path string, samples []float32, sampleRate int) error {
+	if sampleRate <= 0 {
+		return fmt.Errorf("invalid sample rate %d", sampleRate)
+	}
+	f, err := os.Create(path)
+	if err != nil {
+		return fmt.Errorf("create wav: %w", err)
+	}
+	defer f.Close()
+	dataSize := uint32(len(samples) * 2)
+	header := make([]byte, 44)
+	copy(header[0:4], "RIFF")
+	binary.LittleEndian.PutUint32(header[4:8], 36+dataSize)
+	copy(header[8:12], "WAVE")
+	copy(header[12:16], "fmt ")
+	binary.LittleEndian.PutUint32(header[16:20], 16)
+	binary.LittleEndian.PutUint16(header[20:22], 1)
+	binary.LittleEndian.PutUint16(header[22:24], 1)
+	binary.LittleEndian.PutUint32(header[24:28], uint32(sampleRate))
+	binary.LittleEndian.PutUint32(header[28:32], uint32(sampleRate*2))
+	binary.LittleEndian.PutUint16(header[32:34], 2)
+	binary.LittleEndian.PutUint16(header[34:36], 16)
+	copy(header[36:40], "data")
+	binary.LittleEndian.PutUint32(header[40:44], dataSize)
+	if _, err = f.Write(header); err != nil {
+		return err
+	}
+	buf := make([]byte, 2*len(samples))
+	for i, sample := range samples {
+		if sample > 1 {
+			sample = 1
+		} else if sample < -1 {
+			sample = -1
+		}
+		binary.LittleEndian.PutUint16(buf[i*2:], uint16(int16(math.Round(float64(sample*32767)))))
+	}
+	if _, err = f.Write(buf); err != nil {
+		return err
+	}
+	return f.Close()
+}
+
 func ResampleLinear(in []float32, from, to int) []float32 {
 	if from == to || len(in) == 0 {
 		return append([]float32(nil), in...)

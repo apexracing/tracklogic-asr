@@ -24,6 +24,14 @@ func defaultRuntimeCacheDir() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("find user cache directory: %w", err)
 	}
+	return filepath.Join(base, "tracklogic-voice", "runtime", "onnxruntime", ONNXRuntimeVersion, "windows-amd64"), nil
+}
+
+func legacyRuntimeCacheDir() (string, error) {
+	base, err := os.UserCacheDir()
+	if err != nil {
+		return "", err
+	}
 	return filepath.Join(base, "tracklogic-asr", "runtime", "onnxruntime", ONNXRuntimeVersion, "windows-amd64"), nil
 }
 
@@ -38,6 +46,10 @@ func EnsureRuntime(ctx context.Context, cacheDir string, progress ProgressFunc) 
 	runtimeMu.Lock()
 	defer runtimeMu.Unlock()
 	if cacheDir == "" {
+		legacy, legacyErr := legacyRuntimeCacheDir()
+		if legacyErr == nil && validFile(filepath.Join(legacy, "onnxruntime.dll"), runtimeDLLHash) {
+			return filepath.Join(legacy, "onnxruntime.dll"), nil
+		}
 		var err error
 		cacheDir, err = defaultRuntimeCacheDir()
 		if err != nil {

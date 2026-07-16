@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/apexracing/tracklogic-asr/internal/audio"
+	"github.com/apexracing/tracklogic-voice/internal/audio"
 	"github.com/mjibson/go-dsp/fft"
 )
 

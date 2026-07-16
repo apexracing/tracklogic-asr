@@ -25,6 +25,9 @@ func validFile(path, want string) bool {
 }
 
 func downloadFile(ctx context.Context, url, dst, wantHash string, progress ProgressFunc) error {
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return fmt.Errorf("create asset directory: %w", err)
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return fmt.Errorf("create download request: %w", err)

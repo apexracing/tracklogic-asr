@@ -63,6 +63,14 @@ func defaultModelCacheDir() (string, error) {
 	}
 	// Both providers serve byte-identical artifacts, so they intentionally share
 	// the existing cache directory to avoid downloading a second model copy.
+	return filepath.Join(base, "tracklogic-voice", "models", "sensevoice-small-int8", defaultModelCacheRevision), nil
+}
+
+func legacyModelCacheDir() (string, error) {
+	base, err := os.UserCacheDir()
+	if err != nil {
+		return "", err
+	}
 	return filepath.Join(base, "tracklogic-asr", "models", "sensevoice-small-int8", defaultModelCacheRevision), nil
 }
 
@@ -84,6 +92,19 @@ func EnsureModelFrom(ctx context.Context, cacheDir string, source ModelSource, p
 	modelMu.Lock()
 	defer modelMu.Unlock()
 	if cacheDir == "" {
+		legacy, legacyErr := legacyModelCacheDir()
+		if legacyErr == nil {
+			allValid := true
+			for _, file := range defaultModelFiles {
+				if !validFile(filepath.Join(legacy, file.name), file.sha256) {
+					allValid = false
+					break
+				}
+			}
+			if allValid {
+				return modelPaths(legacy), nil
+			}
+		}
 		var err error
 		cacheDir, err = defaultModelCacheDir()
 		if err != nil {

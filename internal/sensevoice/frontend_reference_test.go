@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/apexracing/tracklogic-asr/internal/audio"
+	"github.com/apexracing/tracklogic-voice/internal/audio"
 )
 
 func TestFrontendMatchesKaldiReference(t *testing.T) {

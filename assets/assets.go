@@ -1,4 +1,4 @@
-// Package assets prepares the model and native runtime required by tracklogic-asr.
+// Package assets prepares the models and native runtime required by tracklogic-voice.
 package assets
 
 import (
@@ -10,8 +10,8 @@ import (
 // ProgressFunc receives download or extraction progress in bytes.
 type ProgressFunc func(name string, completed, total int64)
 
-// Config controls custom paths, cache locations, and progress reporting.
-type Config struct {
+// ASRConfig controls custom ASR paths, cache locations, and progress reporting.
+type ASRConfig struct {
 	ModelDir        string
 	ModelCacheDir   string
 	ModelSource     ModelSource
@@ -19,6 +19,10 @@ type Config struct {
 	RuntimeCacheDir string
 	Progress        ProgressFunc
 }
+
+// Config is retained for source compatibility.
+// Deprecated: use ASRConfig.
+type Config = ASRConfig
 
 // Paths contains verified model and runtime paths.
 type Paths struct {
@@ -28,7 +32,7 @@ type Paths struct {
 
 // Prepare resolves custom paths or prepares the default embedded runtime and
 // downloadable model.
-func Prepare(ctx context.Context, cfg Config) (Paths, error) {
+func PrepareASR(ctx context.Context, cfg ASRConfig) (Paths, error) {
 	runtimePath := cfg.RuntimePath
 	var err error
 	if runtimePath == "" {
@@ -56,3 +60,7 @@ func Prepare(ctx context.Context, cfg Config) (Paths, error) {
 	}
 	return Paths{Model: model, RuntimePath: runtimePath}, nil
 }
+
+// Prepare is retained for source compatibility.
+// Deprecated: use PrepareASR.
+func Prepare(ctx context.Context, cfg Config) (Paths, error) { return PrepareASR(ctx, cfg) }
