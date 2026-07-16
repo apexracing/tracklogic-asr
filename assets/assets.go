@@ -14,6 +14,7 @@ type ProgressFunc func(name string, completed, total int64)
 type Config struct {
 	ModelDir        string
 	ModelCacheDir   string
+	ModelSource     ModelSource
 	RuntimePath     string
 	RuntimeCacheDir string
 	Progress        ProgressFunc
@@ -41,7 +42,7 @@ func Prepare(ctx context.Context, cfg Config) (Paths, error) {
 
 	var model ModelPaths
 	if cfg.ModelDir == "" {
-		model, err = EnsureModel(ctx, cfg.ModelCacheDir, cfg.Progress)
+		model, err = EnsureModelFrom(ctx, cfg.ModelCacheDir, cfg.ModelSource, cfg.Progress)
 		if err != nil {
 			return Paths{}, err
 		}

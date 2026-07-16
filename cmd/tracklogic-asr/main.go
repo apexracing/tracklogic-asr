@@ -15,6 +15,7 @@ import (
 func main() {
 	runtimePath := flag.String("runtime", "", "path to onnxruntime.dll (empty uses the embedded runtime)")
 	modelDir := flag.String("model-dir", "", "model directory (empty downloads automatically)")
+	modelSource := flag.String("model-source", string(assets.ModelSourceModelScope), "model download source: modelscope or huggingface")
 	language := flag.String("language", "auto", "auto, zh, en, yue, ja, ko, or nospeech")
 	withoutITN := flag.Bool("without-itn", false, "disable punctuation and inverse text normalization")
 	threads := flag.Int("threads", 0, "ONNX CPU thread count (0 uses runtime default)")
@@ -56,6 +57,7 @@ func main() {
 		Assets: assets.Config{
 			RuntimePath: *runtimePath,
 			ModelDir:    *modelDir,
+			ModelSource: assets.ModelSource(*modelSource),
 			Progress: func(name string, downloaded, total int64) {
 				if total > 0 {
 					percent := int(downloaded * 100 / total)

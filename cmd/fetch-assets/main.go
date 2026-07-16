@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
 
@@ -9,6 +10,8 @@ import (
 )
 
 func main() {
+	modelSource := flag.String("model-source", string(assets.ModelSourceModelScope), "model download source: modelscope or huggingface")
+	flag.Parse()
 	lastPercent := map[string]int{}
 	progress := func(name string, downloaded, total int64) {
 		if total > 0 {
@@ -20,7 +23,10 @@ func main() {
 		}
 	}
 	ctx := context.Background()
-	paths, err := assets.Prepare(ctx, assets.Config{Progress: progress})
+	paths, err := assets.Prepare(ctx, assets.Config{
+		ModelSource: assets.ModelSource(*modelSource),
+		Progress:    progress,
+	})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "\nprepare assets:", err)
 		os.Exit(1)

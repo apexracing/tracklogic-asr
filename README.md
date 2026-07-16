@@ -2,12 +2,18 @@
 
 基于 SenseVoiceSmall INT8 和 ONNX Runtime 的离线 Go ASR 库。公开 API 位于根包 `asr`；模型与运行库准备位于 `assets` 包；音频和推理实现通过 `internal` 隔离。
 
-Windows x64 CPU 版 `onnxruntime.dll` 已通过 `go:embed` 内嵌。约 230 MB 的模型在首次使用时从 Hugging Face 下载、校验并缓存，无需 Python、PyTorch 或 FunASR。
+Windows x64 CPU 版 `onnxruntime.dll` 已通过 `go:embed` 内嵌。约 230 MB 的模型在首次使用时从 ModelScope（默认）或 Hugging Face 下载、校验并缓存，无需 Python、PyTorch 或 FunASR。两个下载源提供相同的固定版本文件并共享本地缓存，不会自动互相回退。
 
 ## 快速测试
 
 ```powershell
 go run ./cmd/tracklogic-asr testdata/zh.wav
+```
+
+需要显式使用 Hugging Face 下载模型时：
+
+```powershell
+go run ./cmd/tracklogic-asr -model-source huggingface testdata/zh.wav
 ```
 
 识别本地 WAV：
@@ -28,34 +34,46 @@ go run ./cmd/tracklogic-asr -record 5s
 .\scripts\fetch-assets.ps1
 ```
 
+也可选择 Hugging Face：
+
+```powershell
+.\scripts\fetch-assets.ps1 -ModelSource huggingface
+```
+
 ## Go API
 
 ```go
 package main
 
 import (
-    "context"
-    "fmt"
-    "log"
+	"context"
+	"fmt"
+	"log"
 
-    asr "github.com/apexracing/tracklogic-asr"
+	asr "github.com/apexracing/tracklogic-asr"
+	"github.com/apexracing/tracklogic-asr/assets"
 )
 
 func main() {
-    ctx := context.Background()
-    recognizer, err := asr.New(ctx, asr.Config{NumThreads: 4})
-    if err != nil {
-        log.Fatal(err)
-    }
-    defer recognizer.Close()
+	ctx := context.Background()
+	recognizer, err := asr.New(ctx, asr.Config{
+		Assets: assets.Config{
+			ModelSource: assets.ModelSourceModelScope,
+		},
+		NumThreads: 4,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer recognizer.Close()
 
-    result, err := recognizer.TranscribeFile(ctx, `testdata\zh.wav`, asr.Options{
-        Language: asr.LanguageAuto,
-    })
-    if err != nil {
-        log.Fatal(err)
-    }
-    fmt.Printf("%s [%s, %s, %v]\n", result.Text, result.Language, result.Emotion, result.Events)
+	result, err := recognizer.TranscribeFile(ctx, `testdata\zh.wav`, asr.Options{
+		Language: asr.LanguageAuto,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("%s [%s, %s, %v]\n", result.Text, result.Language, result.Emotion, result.Events)
 }
 ```
 
@@ -75,12 +93,13 @@ result, err := recognizer.Transcribe(ctx, samples, sampleRate, asr.Options{})
 import "github.com/apexracing/tracklogic-asr/assets"
 
 paths, err := assets.Prepare(ctx, assets.Config{
-    ModelDir:    `D:\ASR\sensevoice-small-int8`,
-    RuntimePath: `D:\ASR\onnxruntime.dll`,
+	ModelSource:   assets.ModelSourceHuggingFace,
+	ModelCacheDir: `D:\ASR\sensevoice-small-int8`,
+	RuntimePath:   `D:\ASR\onnxruntime.dll`,
 })
 ```
 
-`assets.Config` 支持 `ModelCacheDir`、`RuntimeCacheDir` 和 `Progress`。也可分别调用 `assets.EnsureModel` 与 `assets.EnsureRuntime`。
+`ModelSource` 可设为 `assets.ModelSourceModelScope` 或 `assets.ModelSourceHuggingFace`，空值默认使用 ModelScope；选定的源失败时不会自动尝试另一个源。配置了 `ModelDir` 时不会访问下载源。`assets.Config` 还支持 `ModelCacheDir`、`RuntimeCacheDir` 和 `Progress`。也可分别调用 `assets.EnsureModel`、`assets.EnsureModelFrom` 与 `assets.EnsureRuntime`。
 
 ## 目录结构
 
