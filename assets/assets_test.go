@@ -4,8 +4,38 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+func TestPrepareRequiresModelCacheDirForDownload(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		prepare func() error
+	}{
+		{
+			name: "ASR",
+			prepare: func() error {
+				_, err := PrepareASR(context.Background(), ASRConfig{})
+				return err
+			},
+		},
+		{
+			name: "TTS",
+			prepare: func() error {
+				_, err := PrepareTTS(context.Background(), TTSConfig{})
+				return err
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			err := test.prepare()
+			if err == nil || !strings.Contains(err.Error(), "cache directory is required") {
+				t.Fatalf("err=%v", err)
+			}
+		})
+	}
+}
 
 func TestPrepareCustomPaths(t *testing.T) {
 	dir := t.TempDir()

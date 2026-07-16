@@ -27,14 +27,6 @@ func defaultRuntimeCacheDir() (string, error) {
 	return filepath.Join(base, "tracklogic-voice", "runtime", "onnxruntime", ONNXRuntimeVersion, "windows-amd64"), nil
 }
 
-func legacyRuntimeCacheDir() (string, error) {
-	base, err := os.UserCacheDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(base, "tracklogic-asr", "runtime", "onnxruntime", ONNXRuntimeVersion, "windows-amd64"), nil
-}
-
 // EnsureRuntime verifies and installs the embedded Windows x64 runtime.
 func EnsureRuntime(ctx context.Context, cacheDir string, progress ProgressFunc) (string, error) {
 	if runtime.GOOS != "windows" || runtime.GOARCH != "amd64" {
@@ -46,10 +38,6 @@ func EnsureRuntime(ctx context.Context, cacheDir string, progress ProgressFunc) 
 	runtimeMu.Lock()
 	defer runtimeMu.Unlock()
 	if cacheDir == "" {
-		legacy, legacyErr := legacyRuntimeCacheDir()
-		if legacyErr == nil && validFile(filepath.Join(legacy, "onnxruntime.dll"), runtimeDLLHash) {
-			return filepath.Join(legacy, "onnxruntime.dll"), nil
-		}
 		var err error
 		cacheDir, err = defaultRuntimeCacheDir()
 		if err != nil {

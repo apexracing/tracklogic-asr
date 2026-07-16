@@ -22,10 +22,11 @@ import (
 )
 
 const (
-	warmupCount   = 3
-	measureCount  = 10
-	threadCount   = 2
-	regressionPct = 15.0
+	warmupCount        = 3
+	measureCount       = 10
+	goMaxProcs         = 2
+	defaultONNXThreads = 2
+	regressionPct      = 15.0
 )
 
 type report struct {
@@ -82,29 +83,39 @@ type scenario struct {
 
 func main() {
 	var (
-		asrDir  = flag.String("asr-model-dir", "", "prepared SenseVoice model directory")
-		ttsDir  = flag.String("tts-model-dir", "", "prepared Kokoro model directory")
-		source  = flag.String("model-source", "modelscope", "modelscope or huggingface")
-		wav     = flag.String("wav", filepath.FromSlash("testdata/zh.wav"), "ASR benchmark WAV")
-		output  = flag.String("out", filepath.FromSlash("benchmark-results/baseline-windows-i7-10700f.json"), "JSON report path")
-		compare = flag.String("compare", "", "optional baseline JSON to compare with a 15% threshold")
-		cpuName = flag.String("cpu", "Intel Core i7-10700F (8 cores, 16 threads)", "CPU description stored in the report")
+		asrDir      = flag.String("asr-model-dir", "", "prepared SenseVoice model directory")
+		ttsDir      = flag.String("tts-model-dir", "", "prepared Kokoro model directory")
+		asrCacheDir = flag.String("asr-model-cache-dir", "", "ASR model download directory when asr-model-dir is empty")
+		ttsCacheDir = flag.String("tts-model-cache-dir", "", "TTS model download directory when tts-model-dir is empty")
+		source      = flag.String("model-source", "modelscope", "modelscope or huggingface")
+		wav         = flag.String("wav", filepath.FromSlash("testdata/zh.wav"), "ASR benchmark WAV")
+		output      = flag.String("out", filepath.FromSlash("benchmark-results/baseline-windows-i7-10700f.json"), "JSON report path")
+		compare     = flag.String("compare", "", "optional baseline JSON to compare with a 15% threshold")
+		cpuName     = flag.String("cpu", "Intel Core i7-10700F (8 cores, 16 threads)", "CPU description stored in the report")
+		onnxThreads = flag.Int("onnx-threads", defaultONNXThreads, "ONNX intra-op CPU threads")
 	)
 	flag.Parse()
 	if runtime.GOOS != "windows" || runtime.GOARCH != "amd64" {
 		fatalf("benchmark runner requires windows/amd64")
 	}
-	runtime.GOMAXPROCS(threadCount)
+	if *onnxThreads <= 0 {
+		fatalf("onnx-threads must be greater than zero")
+	}
+	runtime.GOMAXPROCS(goMaxProcs)
 	ctx := context.Background()
 	selectedSource := assets.ModelSource(*source)
 
 	// Asset preparation is intentionally outside every initialization and
 	// inference timer.
-	asrAssets, err := assets.PrepareASR(ctx, assets.ASRConfig{ModelDir: *asrDir, ModelSource: selectedSource, Progress: progress})
+	asrAssets, err := assets.PrepareASR(ctx, assets.ASRConfig{
+		ModelDir: *asrDir, ModelCacheDir: *asrCacheDir, ModelSource: selectedSource, Progress: progress,
+	})
 	if err != nil {
 		fatalf("prepare ASR assets: %v", err)
 	}
-	ttsAssets, err := assets.PrepareTTS(ctx, assets.TTSConfig{ModelDir: *ttsDir, ModelSource: selectedSource, Progress: progress})
+	ttsAssets, err := assets.PrepareTTS(ctx, assets.TTSConfig{
+		ModelDir: *ttsDir, ModelCacheDir: *ttsCacheDir, ModelSource: selectedSource, Progress: progress,
+	})
 	if err != nil {
 		fatalf("prepare TTS assets: %v", err)
 	}
@@ -120,7 +131,7 @@ func main() {
 			GoVersion: runtime.Version(), ONNXRuntime: assets.ONNXRuntimeVersion,
 			ASRRevision: assets.ModelScopeModelRevision, TTSModelScopeRev: assets.ModelScopeTTSRevision,
 			TTSHuggingFaceRev: assets.HuggingFaceTTSRevision, Commit: gitCommit(), TestedAt: time.Now().Format(time.RFC3339),
-			GOMAXPROCS: threadCount, IntraOpThreads: threadCount, InterOpThreads: 1, ExecutionMode: "sequential",
+			GOMAXPROCS: goMaxProcs, IntraOpThreads: *onnxThreads, InterOpThreads: 1, ExecutionMode: "sequential",
 			Warmups: warmupCount, Measurements: measureCount,
 		},
 		Initialization: map[string]float64{},
@@ -129,7 +140,7 @@ func main() {
 	started := time.Now()
 	recognizer, err := voice.NewRecognizer(ctx, voice.RecognizerConfig{Assets: assets.ASRConfig{
 		ModelDir: asrAssets.Model.Directory, RuntimePath: asrAssets.RuntimePath,
-	}, NumThreads: threadCount})
+	}, NumThreads: *onnxThreads})
 	if err != nil {
 		fatalf("initialize recognizer: %v", err)
 	}
@@ -149,7 +160,7 @@ func main() {
 	started = time.Now()
 	synthesizer, err := voice.NewSynthesizer(ctx, voice.SynthesizerConfig{Assets: assets.TTSConfig{
 		ModelDir: ttsAssets.Model.Directory, RuntimePath: ttsAssets.RuntimePath,
-	}, NumThreads: threadCount})
+	}, NumThreads: *onnxThreads})
 	if err != nil {
 		fatalf("initialize synthesizer: %v", err)
 	}
@@ -287,7 +298,7 @@ func markdown(r report) string {
 	fmt.Fprintln(&b, "\nSession initialization (asset download excluded):")
 	fmt.Fprintf(&b, "\n- ASR: %.2f ms\n- TTS: %.2f ms\n", r.Initialization["asr"], r.Initialization["tts"])
 	fmt.Fprintln(&b, "\nCompare a later run with this baseline:")
-	fmt.Fprintln(&b, "\n```powershell\ngo run ./cmd/voice-benchmark -compare benchmark-results/baseline-windows-i7-10700f.json -out benchmark-results/current.json\n```")
+	fmt.Fprintln(&b, "\n```powershell\ngo run ./cmd/voice-benchmark -asr-model-cache-dir C:\\\\your-app\\\\models\\\\sensevoice-small-int8 -tts-model-cache-dir C:\\\\your-app\\\\models\\\\kokoro-82m-v1.1-zh -compare benchmark-results/baseline-windows-i7-10700f.json -out benchmark-results/current.json\n```")
 	fmt.Fprintln(&b, "\nThe command fails when mean latency, CPU time per operation, or peak working set regresses by more than 15%.")
 	return b.String()
 }

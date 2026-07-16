@@ -69,7 +69,7 @@ func TestIntegrationSenseVoiceINT8(t *testing.T) {
 	}
 }
 
-func TestIntegrationKokoroQuantized(t *testing.T) {
+func TestIntegrationKokoro(t *testing.T) {
 	if runtime.GOOS != "windows" || runtime.GOARCH != "amd64" {
 		t.Skip("bundled runtime is windows/amd64")
 	}
@@ -89,6 +89,15 @@ func TestIntegrationKokoroQuantized(t *testing.T) {
 	}
 	if got := len(s.Voices()); got != 103 {
 		t.Fatalf("Voices() returned %d entries, want 103", got)
+	}
+	modelVoices := make(map[string]struct{}, len(s.Voices()))
+	for _, id := range s.Voices() {
+		modelVoices[id] = struct{}{}
+	}
+	for _, option := range SelectableVoices() {
+		if _, ok := modelVoices[option.ID]; !ok {
+			t.Errorf("selectable voice %q (%s) is absent from the model", option.ID, option.Name)
+		}
 	}
 	for name, text := range map[string]string{
 		"Chinese": "千里之行，始于足下。",

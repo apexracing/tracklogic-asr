@@ -22,7 +22,6 @@ const (
 	ModelScopeModelRevision    = "4e95991ddb34c70e9b94f026d62ac82a9d941ae1"
 	HuggingFaceModelRepository = "DennisHuang648/SenseVoiceSmall-onnx"
 	HuggingFaceModelRevision   = "0e0d0a81fe03a27c0d56329ff6fc2dcc3fe01f7e"
-	defaultModelCacheRevision  = HuggingFaceModelRevision
 
 	// DefaultModelRepository is retained for compatibility.
 	// Deprecated: use HuggingFaceModelRepository or ModelScopeModelRepository.
@@ -56,24 +55,6 @@ type ModelPaths struct {
 	Config    string
 }
 
-func defaultModelCacheDir() (string, error) {
-	base, err := os.UserCacheDir()
-	if err != nil {
-		return "", fmt.Errorf("find user cache directory: %w", err)
-	}
-	// Both providers serve byte-identical artifacts, so they intentionally share
-	// the existing cache directory to avoid downloading a second model copy.
-	return filepath.Join(base, "tracklogic-voice", "models", "sensevoice-small-int8", defaultModelCacheRevision), nil
-}
-
-func legacyModelCacheDir() (string, error) {
-	base, err := os.UserCacheDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(base, "tracklogic-asr", "models", "sensevoice-small-int8", defaultModelCacheRevision), nil
-}
-
 // EnsureModel downloads the pinned INT8 model from ModelScope and verifies it.
 func EnsureModel(ctx context.Context, cacheDir string, progress ProgressFunc) (ModelPaths, error) {
 	return EnsureModelFrom(ctx, cacheDir, ModelSourceModelScope, progress)
@@ -85,32 +66,15 @@ func EnsureModelFrom(ctx context.Context, cacheDir string, source ModelSource, p
 	if err := ctx.Err(); err != nil {
 		return ModelPaths{}, err
 	}
+	if cacheDir == "" {
+		return ModelPaths{}, fmt.Errorf("ASR model cache directory is required")
+	}
 	source, err := normalizeModelSource(source)
 	if err != nil {
 		return ModelPaths{}, err
 	}
 	modelMu.Lock()
 	defer modelMu.Unlock()
-	if cacheDir == "" {
-		legacy, legacyErr := legacyModelCacheDir()
-		if legacyErr == nil {
-			allValid := true
-			for _, file := range defaultModelFiles {
-				if !validFile(filepath.Join(legacy, file.name), file.sha256) {
-					allValid = false
-					break
-				}
-			}
-			if allValid {
-				return modelPaths(legacy), nil
-			}
-		}
-		var err error
-		cacheDir, err = defaultModelCacheDir()
-		if err != nil {
-			return ModelPaths{}, err
-		}
-	}
 	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
 		return ModelPaths{}, fmt.Errorf("create model cache: %w", err)
 	}

@@ -105,3 +105,10 @@ func TestEnsureTTSModelSourcesShareManifestCache(t *testing.T) {
 		t.Fatalf("download methods=%v; ModelScope LFS must use GET only", methods)
 	}
 }
+
+func TestEnsureTTSModelRequiresCacheDir(t *testing.T) {
+	_, err := EnsureTTSModelFrom(context.Background(), "", ModelSourceModelScope, nil)
+	if err == nil || !strings.Contains(err.Error(), "cache directory is required") {
+		t.Fatalf("err=%v", err)
+	}
+}

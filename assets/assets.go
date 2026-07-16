@@ -11,6 +11,7 @@ import (
 type ProgressFunc func(name string, completed, total int64)
 
 // ASRConfig controls custom ASR paths, cache locations, and progress reporting.
+// ModelCacheDir is required when ModelDir is empty.
 type ASRConfig struct {
 	ModelDir        string
 	ModelCacheDir   string
@@ -30,9 +31,12 @@ type Paths struct {
 	RuntimePath string
 }
 
-// Prepare resolves custom paths or prepares the default embedded runtime and
-// downloadable model.
+// PrepareASR resolves custom paths or prepares the embedded runtime and the
+// downloadable model in the caller-provided cache directory.
 func PrepareASR(ctx context.Context, cfg ASRConfig) (Paths, error) {
+	if cfg.ModelDir == "" && cfg.ModelCacheDir == "" {
+		return Paths{}, fmt.Errorf("ASR model cache directory is required when model directory is not set")
+	}
 	runtimePath := cfg.RuntimePath
 	var err error
 	if runtimePath == "" {

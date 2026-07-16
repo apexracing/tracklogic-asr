@@ -11,15 +11,14 @@ import (
 )
 
 const (
-	ModelScopeTTSRepository  = "huntsman/Kokoro-82M-v1.1-zh-ONNX"
-	ModelScopeTTSRevision    = "80d48ea07e671ec7de0f3f59c32941d3a5c00e53"
-	HuggingFaceTTSRepository = "tracklogic/Kokoro-82M-v1.1-zh-ONNX"
-	HuggingFaceTTSRevision   = "f78bc7bcc7b3646cbf899829ca31cc5c852bbb31"
-	ttsManifestRevision      = "manifest-v1"
+	ModelScopeTTSRepository  = "huntsman/voice"
+	ModelScopeTTSRevision    = "49e8fe2437ce5cc1c9af35d3285e56b14980099f"
+	HuggingFaceTTSRepository = "tracklogic/voice"
+	HuggingFaceTTSRevision   = "7b789e1fc5e3cf09e4634dc53c7fc4ed062ab00b"
 )
 
 var defaultTTSFiles = []modelFile{
-	{"onnx/model_quantized.onnx", "a39469be791eeaa3089c1ed5e58b8731d1f2462ea0e7dae2bc44388e58f973d8"},
+	{"onnx/model_quantized.onnx", "94b973941b1852754f979be5d5e20be666d5c81d9bb886b88ae1dc85c9b895ca"},
 	{"voices/voices-v1.1-zh.bin", "14cb6186c99e4f6016871405f62046c5df863ae27465cbdc4ee08be7dd703acd"},
 	{"tokenizer.json", "5715a60b09d5e4b9074435d68c6ccd5675b9d48b220e109fdea3cda681e23d15"},
 	{"tokenizer_config.json", "be1cb066d6ef6b074b3f15e6a6dd21ac88ff3cdaedf325f0aaed686c70f75d20"},
@@ -29,6 +28,7 @@ var defaultTTSFiles = []modelFile{
 var ttsMu sync.Mutex
 
 // TTSConfig controls Kokoro paths, cache locations, and progress reporting.
+// ModelCacheDir is required when ModelDir is empty.
 type TTSConfig struct {
 	ModelDir        string
 	ModelCacheDir   string
@@ -54,8 +54,12 @@ type TTSPaths struct {
 	RuntimePath string
 }
 
-// PrepareTTS resolves custom paths or downloads the pinned Kokoro assets.
+// PrepareTTS resolves custom paths or downloads the pinned Kokoro assets into
+// the caller-provided cache directory.
 func PrepareTTS(ctx context.Context, cfg TTSConfig) (TTSPaths, error) {
+	if cfg.ModelDir == "" && cfg.ModelCacheDir == "" {
+		return TTSPaths{}, fmt.Errorf("TTS model cache directory is required when model directory is not set")
+	}
 	runtimePath := cfg.RuntimePath
 	var err error
 	if runtimePath == "" {
@@ -94,19 +98,15 @@ func EnsureTTSModelFrom(ctx context.Context, cacheDir string, source ModelSource
 	if err := ctx.Err(); err != nil {
 		return TTSModelPaths{}, err
 	}
+	if cacheDir == "" {
+		return TTSModelPaths{}, fmt.Errorf("TTS model cache directory is required")
+	}
 	source, err := normalizeModelSource(source)
 	if err != nil {
 		return TTSModelPaths{}, err
 	}
 	ttsMu.Lock()
 	defer ttsMu.Unlock()
-	if cacheDir == "" {
-		base, err := os.UserCacheDir()
-		if err != nil {
-			return TTSModelPaths{}, fmt.Errorf("find user cache directory: %w", err)
-		}
-		cacheDir = filepath.Join(base, "tracklogic-voice", "models", "kokoro-82m-v1.1-zh", ttsManifestRevision)
-	}
 	for _, file := range defaultTTSFiles {
 		dst := filepath.Join(cacheDir, filepath.FromSlash(file.name))
 		if validFile(dst, file.sha256) {

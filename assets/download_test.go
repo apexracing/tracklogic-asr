@@ -45,6 +45,57 @@ func TestDownloadFileFollowsRedirectAndReportsProgress(t *testing.T) {
 	}
 }
 
+func TestDownloadFileReplacesExistingAsset(t *testing.T) {
+	payload := []byte("new model payload")
+	hash := sha256.Sum256(payload)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(payload)
+	}))
+	defer server.Close()
+
+	dst := filepath.Join(t.TempDir(), "model.bin")
+	if err := os.WriteFile(dst, []byte("old model payload"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := downloadFile(context.Background(), server.URL, dst, hex.EncodeToString(hash[:]), nil); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(payload) {
+		t.Fatalf("payload=%q want %q", got, payload)
+	}
+}
+
+func TestDownloadFilePreservesExistingAssetOnFailure(t *testing.T) {
+	old := []byte("old model payload")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("corrupt replacement"))
+	}))
+	defer server.Close()
+
+	dst := filepath.Join(t.TempDir(), "model.bin")
+	if err := os.WriteFile(dst, old, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	want := sha256.Sum256([]byte("expected replacement"))
+	if err := downloadFile(context.Background(), server.URL, dst, hex.EncodeToString(want[:]), nil); err == nil {
+		t.Fatal("expected verification error")
+	}
+	got, err := os.ReadFile(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(old) {
+		t.Fatalf("existing asset changed to %q", got)
+	}
+	if _, err = os.Stat(dst + ".download"); !os.IsNotExist(err) {
+		t.Fatalf("temporary download remains: %v", err)
+	}
+}
+
 func TestDownloadFileCleansUpFailures(t *testing.T) {
 	payload := []byte("wrong payload")
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

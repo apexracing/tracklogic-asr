@@ -41,6 +41,7 @@ func usage() {
 func runASR(args []string) error {
 	fs := flag.NewFlagSet("asr", flag.ContinueOnError)
 	modelDir := fs.String("model-dir", "", "SenseVoice model directory")
+	modelCacheDir := fs.String("model-cache-dir", "", "required download directory when model-dir is empty")
 	runtimePath := fs.String("runtime", "", "path to onnxruntime.dll")
 	source := fs.String("model-source", "modelscope", "modelscope or huggingface")
 	language := fs.String("language", "auto", "auto, zh, en, yue, ja, ko, or nospeech")
@@ -55,7 +56,8 @@ func runASR(args []string) error {
 	ctx := context.Background()
 	started := time.Now()
 	r, err := voice.NewRecognizer(ctx, voice.RecognizerConfig{Assets: assets.ASRConfig{
-		ModelDir: *modelDir, RuntimePath: *runtimePath, ModelSource: assets.ModelSource(*source), Progress: progress,
+		ModelDir: *modelDir, ModelCacheDir: *modelCacheDir, RuntimePath: *runtimePath,
+		ModelSource: assets.ModelSource(*source), Progress: progress,
 	}, NumThreads: *threads})
 	if err != nil {
 		return err
@@ -75,6 +77,7 @@ func runASR(args []string) error {
 func runTTS(args []string) error {
 	fs := flag.NewFlagSet("tts", flag.ContinueOnError)
 	modelDir := fs.String("model-dir", "", "Kokoro model directory")
+	modelCacheDir := fs.String("model-cache-dir", "", "required download directory when model-dir is empty")
 	runtimePath := fs.String("runtime", "", "path to onnxruntime.dll")
 	source := fs.String("model-source", "modelscope", "modelscope or huggingface")
 	language := fs.String("language", "auto", "auto, zh, or en")
@@ -93,7 +96,8 @@ func runTTS(args []string) error {
 	ctx := context.Background()
 	started := time.Now()
 	s, err := voice.NewSynthesizer(ctx, voice.SynthesizerConfig{Assets: assets.TTSConfig{
-		ModelDir: *modelDir, RuntimePath: *runtimePath, ModelSource: assets.ModelSource(*source), Progress: progress,
+		ModelDir: *modelDir, ModelCacheDir: *modelCacheDir, RuntimePath: *runtimePath,
+		ModelSource: assets.ModelSource(*source), Progress: progress,
 	}, NumThreads: *threads})
 	if err != nil {
 		return err
@@ -111,22 +115,27 @@ func runTTS(args []string) error {
 func runFetch(args []string) error {
 	fs := flag.NewFlagSet("fetch", flag.ContinueOnError)
 	source := fs.String("model-source", "modelscope", "modelscope or huggingface")
+	modelCacheDir := fs.String("model-cache-dir", "", "model download directory (required)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if fs.NArg() != 1 {
-		return fmt.Errorf("usage: tracklogic-voice fetch [-model-source source] <asr|tts>")
+		return fmt.Errorf("usage: tracklogic-voice fetch -model-cache-dir directory [-model-source source] <asr|tts>")
 	}
 	ctx := context.Background()
 	switch fs.Arg(0) {
 	case "asr":
-		paths, err := assets.PrepareASR(ctx, assets.ASRConfig{ModelSource: assets.ModelSource(*source), Progress: progress})
+		paths, err := assets.PrepareASR(ctx, assets.ASRConfig{
+			ModelCacheDir: *modelCacheDir, ModelSource: assets.ModelSource(*source), Progress: progress,
+		})
 		if err == nil {
 			fmt.Println(paths.Model.Directory)
 		}
 		return err
 	case "tts":
-		paths, err := assets.PrepareTTS(ctx, assets.TTSConfig{ModelSource: assets.ModelSource(*source), Progress: progress})
+		paths, err := assets.PrepareTTS(ctx, assets.TTSConfig{
+			ModelCacheDir: *modelCacheDir, ModelSource: assets.ModelSource(*source), Progress: progress,
+		})
 		if err == nil {
 			fmt.Println(paths.Model.Directory)
 		}

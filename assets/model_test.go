@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -194,6 +193,13 @@ func TestEnsureModelFromRejectsUnknownSource(t *testing.T) {
 	}
 }
 
+func TestEnsureModelRequiresCacheDir(t *testing.T) {
+	_, err := EnsureModelFrom(context.Background(), "", ModelSourceModelScope, nil)
+	if err == nil || !strings.Contains(err.Error(), "cache directory is required") {
+		t.Fatalf("err=%v", err)
+	}
+}
+
 func installTestModelFiles(t *testing.T) map[string][]byte {
 	t.Helper()
 	payloads := map[string][]byte{
@@ -210,17 +216,4 @@ func installTestModelFiles(t *testing.T) map[string][]byte {
 	}
 	t.Cleanup(func() { defaultModelFiles = old })
 	return payloads
-}
-
-func TestDefaultModelCacheDirRemainsCompatible(t *testing.T) {
-	dir, err := defaultModelCacheDir()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if filepath.Base(dir) != HuggingFaceModelRevision {
-		t.Fatalf("cache dir=%q", dir)
-	}
-	if _, err := os.Stat(filepath.Dir(dir)); err != nil && !os.IsNotExist(err) {
-		t.Fatal(err)
-	}
 }

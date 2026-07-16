@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"unicode/utf8"
 )
 
 type tokenizer struct{ vocab map[rune]int64 }
@@ -35,7 +36,7 @@ func loadTokenizer(path string) (*tokenizer, error) {
 }
 
 func (t *tokenizer) tokenize(text string) ([]int64, error) {
-	ids := make([]int64, 0, len([]rune(text)))
+	ids := make([]int64, 0, utf8.RuneCountInString(text))
 	for _, r := range text {
 		id, ok := t.vocab[r]
 		if !ok {
@@ -59,11 +60,11 @@ func chunkTokens(ids []int64, max int) [][]int64 {
 				break
 			}
 		}
-		chunks = append(chunks, append([]int64(nil), ids[:cut]...))
+		chunks = append(chunks, ids[:cut])
 		ids = ids[cut:]
 	}
 	if len(ids) > 0 {
-		chunks = append(chunks, append([]int64(nil), ids...))
+		chunks = append(chunks, ids)
 	}
 	return chunks
 }

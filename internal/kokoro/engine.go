@@ -128,12 +128,12 @@ func (e *Engine) Synthesize(ctx context.Context, phonemes, voice string, speed f
 			}
 			return nil, fmt.Errorf("unexpected Kokoro waveform type %T", outputs[0])
 		}
-		part := append([]float32(nil), wave.GetData()...)
-		wave.Destroy()
+		part := wave.GetData()
 		if trim {
 			part = trimSilence(part)
 		}
 		output = append(output, part...)
+		wave.Destroy()
 	}
 	return output, nil
 }
@@ -153,7 +153,7 @@ func trimSilence(samples []float32) []float32 {
 	}
 	start = max(0, start-padding)
 	end = min(len(samples), end+padding)
-	return append([]float32(nil), samples[start:end]...)
+	return samples[start:end]
 }
 
 func (e *Engine) Close() error {
