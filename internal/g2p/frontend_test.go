@@ -77,6 +77,32 @@ func TestAutoLanguageSegmentation(t *testing.T) {
 	}
 }
 
+func TestAutoLanguageSegmentationPreservesTelemetryDecimals(t *testing.T) {
+	chinesePoint, err := phonemizeChinese("点")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _, err := New().Phonemize("当前油量 62.8 L，速度 213.4 km/h。", LanguageAuto)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count := strings.Count(got, chinesePoint); count != 2 {
+		t.Fatalf("Chinese telemetry decimals spoken with %d point markers, want 2: %q", count, got)
+	}
+
+	englishPoint, err := phonemizeEnglish("point")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _, err = New().Phonemize("Fuel 62.8 L, speed 213.4 km/h.", LanguageAuto)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count := strings.Count(got, englishPoint); count != 2 {
+		t.Fatalf("English telemetry decimals spoken with %d point markers, want 2: %q", count, got)
+	}
+}
+
 func TestRejectUnsupportedLanguage(t *testing.T) {
 	if _, _, err := New().Phonemize("hello", "fr"); err == nil {
 		t.Fatal("expected unsupported-language error")

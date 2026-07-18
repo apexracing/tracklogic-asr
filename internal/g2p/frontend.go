@@ -58,6 +58,7 @@ func classify(r rune) scriptClass {
 func (f *Frontend) phonemizeAuto(text string) (string, string, error) {
 	var out strings.Builder
 	var segment []rune
+	runes := []rune(text)
 	current := classOther
 	lastLexical := classOther
 	seenZH, seenEN := false, false
@@ -85,7 +86,7 @@ func (f *Frontend) phonemizeAuto(text string) (string, string, error) {
 		segment = segment[:0]
 		return nil
 	}
-	for _, r := range text {
+	for i, r := range runes {
 		class := classify(r)
 		if class == classOther {
 			if unicode.IsDigit(r) {
@@ -96,6 +97,13 @@ func (f *Frontend) phonemizeAuto(text string) (string, string, error) {
 					}
 				}
 				segment = append(segment, r)
+				continue
+			}
+			// A decimal separator between digits belongs to the current numeric
+			// segment. Treating it as sentence punctuation drops the spoken
+			// "point/点" in mixed telemetry text such as "62.8 L".
+			if isDecimalSeparator(r) && len(segment) > 0 && unicode.IsDigit(segment[len(segment)-1]) && i+1 < len(runes) && unicode.IsDigit(runes[i+1]) {
+				segment = append(segment, '.')
 				continue
 			}
 			if err := flush(); err != nil {
@@ -127,6 +135,10 @@ func (f *Frontend) phonemizeAuto(text string) (string, string, error) {
 		detected = LanguageAuto
 	}
 	return strings.TrimSpace(out.String()), detected, nil
+}
+
+func isDecimalSeparator(r rune) bool {
+	return r == '.' || r == '．'
 }
 
 func mapPunctuation(r rune) rune {

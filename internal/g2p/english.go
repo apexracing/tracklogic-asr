@@ -20,7 +20,7 @@ var (
 	cmuOnce        sync.Once
 	cmu            map[string][]string
 	cmuErr         error
-	englishTokenRE = regexp.MustCompile(`[A-Za-z]+(?:['-][A-Za-z]+)*|[0-9]+|[.,!?;:]`)
+	englishTokenRE = regexp.MustCompile(`[A-Za-z]+(?:['-][A-Za-z]+)*|[0-9]+(?:\.[0-9]+)?|[.,!?;:]`)
 )
 
 var arpabet = map[string]string{
@@ -81,7 +81,7 @@ func phonemizeEnglish(text string) (string, error) {
 			out = append(out, token)
 			continue
 		}
-		if _, err := strconv.Atoi(token); err == nil {
+		if isEnglishNumber(token) {
 			token = englishNumber(token)
 		}
 		words := strings.Fields(strings.ReplaceAll(token, "-", " "))
@@ -205,6 +205,37 @@ func containsStress(phones []string) bool {
 }
 
 func englishNumber(raw string) string {
+	parts := strings.SplitN(raw, ".", 2)
+	if len(parts) == 2 {
+		integer := englishInteger(parts[0])
+		fraction := make([]string, 0, len(parts[1]))
+		for _, r := range parts[1] {
+			fraction = append(fraction, digitWord(r))
+		}
+		return integer + " point " + strings.Join(fraction, " ")
+	}
+	return englishInteger(raw)
+}
+
+func isEnglishNumber(raw string) bool {
+	parts := strings.SplitN(raw, ".", 2)
+	if len(parts) == 0 || parts[0] == "" {
+		return false
+	}
+	if _, err := strconv.Atoi(parts[0]); err != nil {
+		return false
+	}
+	if len(parts) == 1 {
+		return true
+	}
+	if parts[1] == "" {
+		return false
+	}
+	_, err := strconv.Atoi(parts[1])
+	return err == nil
+}
+
+func englishInteger(raw string) string {
 	n, err := strconv.Atoi(raw)
 	if err != nil {
 		return raw
