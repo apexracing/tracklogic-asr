@@ -56,6 +56,11 @@ func classify(r rune) scriptClass {
 }
 
 func (f *Frontend) phonemizeAuto(text string) (string, string, error) {
+	if containsHan(text) {
+		// Preserve the relationship between a numeric value and an ASCII unit
+		// before script segmentation separates them into Chinese/English runs.
+		text = normalizeChineseMeasurements(text)
+	}
 	var out strings.Builder
 	var segment []rune
 	runes := []rune(text)
@@ -135,6 +140,15 @@ func (f *Frontend) phonemizeAuto(text string) (string, string, error) {
 		detected = LanguageAuto
 	}
 	return strings.TrimSpace(out.String()), detected, nil
+}
+
+func containsHan(text string) bool {
+	for _, r := range text {
+		if unicode.Is(unicode.Han, r) {
+			return true
+		}
+	}
+	return false
 }
 
 func isDecimalSeparator(r rune) bool {

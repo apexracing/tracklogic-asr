@@ -12,12 +12,64 @@ import (
 )
 
 var (
-	segmenterOnce sync.Once
-	segmenter     gse.Segmenter
-	segmenterErr  error
-	percentRE     = regexp.MustCompile(`([0-9]+(?:\.[0-9]+)?)%`)
-	numberRE      = regexp.MustCompile(`[0-9]+(?:\.[0-9]+)?`)
+	segmenterOnce  sync.Once
+	segmenter      gse.Segmenter
+	segmenterErr   error
+	percentRE      = regexp.MustCompile(`([0-9]+(?:\.[0-9]+)?)%`)
+	numberRE       = regexp.MustCompile(`[0-9]+(?:\.[0-9]+)?`)
+	zhUnitPatterns = []zhUnitPattern{
+		newZHUnitPattern(`kg/(?:m\^?3|m³)`, "千克每立方米"),
+		newZHUnitPattern(`m/(?:s\^?2|s²)`, "米每二次方秒"),
+		newZHUnitPattern(`(?:km/h|kmh|kph)`, "公里每小时"),
+		newZHUnitPattern(`mph`, "英里每小时"),
+		newZHUnitPattern(`kg/h`, "千克每小时"),
+		newZHUnitPattern(`rad/s`, "弧度每秒"),
+		newZHUnitPattern(`(?:revs/min|rpm)`, "转每分钟"),
+		newZHUnitPattern(`m/s`, "米每秒"),
+		newZHUnitPattern(`s/s`, "秒每秒"),
+		newZHUnitPattern(`(?:N\s*[*·]\s*m|Nm)`, "牛顿米"),
+		newZHUnitPattern(`kWh`, "千瓦时"),
+		newZHUnitPattern(`kPa`, "千帕"),
+		newZHUnitPattern(`mmHg`, "毫米汞柱"),
+		newZHUnitPattern(`inHg`, "英寸汞柱"),
+		newZHUnitPattern(`psi`, "磅每平方英寸"),
+		newZHUnitPattern(`bar`, "巴"),
+		newZHUnitPattern(`(?:°\s*C|℃)`, "摄氏度"),
+		newZHUnitPattern(`(?:°\s*F|℉)`, "华氏度"),
+		newZHUnitPattern(`fps`, "帧每秒"),
+		newZHUnitPattern(`Hz`, "赫兹"),
+		newZHUnitPattern(`kW`, "千瓦"),
+		newZHUnitPattern(`hp`, "马力"),
+		newZHUnitPattern(`km`, "公里"),
+		newZHUnitPattern(`cm`, "厘米"),
+		newZHUnitPattern(`mm`, "毫米"),
+		newZHUnitPattern(`ms`, "毫秒"),
+		newZHUnitPattern(`kg`, "千克"),
+		newZHUnitPattern(`kJ`, "千焦"),
+		newZHUnitPattern(`Pa`, "帕"),
+		newZHUnitPattern(`min`, "分钟"),
+		newZHUnitPattern(`(?:L|l)`, "升"),
+		newZHUnitPattern(`rad`, "弧度"),
+		newZHUnitPattern(`V`, "伏"),
+		newZHUnitPattern(`C`, "摄氏度"),
+		newZHUnitPattern(`F`, "华氏度"),
+		newZHUnitPattern(`m`, "米"),
+		newZHUnitPattern(`s`, "秒"),
+		newZHUnitPattern(`h`, "小时"),
+	}
 )
+
+type zhUnitPattern struct {
+	re          *regexp.Regexp
+	replacement string
+}
+
+func newZHUnitPattern(unitPattern, spoken string) zhUnitPattern {
+	return zhUnitPattern{
+		re:          regexp.MustCompile(`(?i)([0-9]+(?:\.[0-9]+)?)\s*(?:` + unitPattern + `)($|[^A-Za-z0-9])`),
+		replacement: `${1}` + spoken + `${2}`,
+	}
+}
 
 var zhInitial = map[string]string{
 	"b": "ㄅ", "p": "ㄆ", "m": "ㄇ", "f": "ㄈ", "d": "ㄉ", "t": "ㄊ", "n": "ㄋ", "l": "ㄌ",
@@ -112,8 +164,21 @@ func phonemizeChinese(text string) (string, error) {
 }
 
 func normalizeChineseNumbers(text string) string {
-	text = percentRE.ReplaceAllString(text, "百分之$1")
+	text = normalizeChineseMeasurements(text)
 	return numberRE.ReplaceAllStringFunc(text, chineseNumber)
+}
+
+// normalizeChineseMeasurements converts telemetry-oriented symbols and SI
+// abbreviations while their numeric context is still available. Matching a
+// leading number and a complete unit token avoids rewriting car names and
+// ordinary acronyms such as GT3 or LMP2.
+func normalizeChineseMeasurements(text string) string {
+	text = strings.NewReplacer("．", ".", "％", "%").Replace(text)
+	text = percentRE.ReplaceAllString(text, "百分之$1")
+	for _, pattern := range zhUnitPatterns {
+		text = pattern.re.ReplaceAllString(text, pattern.replacement)
+	}
+	return text
 }
 
 func chineseNumber(raw string) string {
